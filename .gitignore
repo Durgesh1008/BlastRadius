@@ -13,15 +13,6 @@ TestResults/
 *.trx
 coverage/
 
-## Secrets and Local App Configuration
-appsettings.json
-appsettings.*.json
-!appsettings.template.json
-!appsettings.*.template.json
-*.local.json
-*.env
-.env*
-
 ## OS-generated files
 Thumbs.db
 ehthumbs.db
