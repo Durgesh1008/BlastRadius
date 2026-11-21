@@ -8,7 +8,8 @@ using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Database Configuration (Neon PostgreSQL with graceful in-memory fallback)
-string? pgConn = builder.Configuration.GetConnectionString("PostgreSQL");
+string? rawPgConn = builder.Configuration.GetConnectionString("PostgreSQL");
+string? pgConn = !string.IsNullOrWhiteSpace(rawPgConn) ? PostgresConnectionHelper.Normalize(rawPgConn) : null;
 bool isPostgreSqlConfigured = !string.IsNullOrWhiteSpace(pgConn) && !pgConn.Contains("YOUR_NEON_POSTGRESQL_CONNECTION_STRING");
 
 builder.Services.AddDbContext<BlastRadiusDbContext>(options =>
@@ -100,6 +101,31 @@ using (var scope = app.Services.CreateScope())
         {
             logger.LogInformation("Neon PostgreSQL connection string not configured. Running with in-memory database.");
             db.Database.EnsureCreated();
+        }
+
+        // Seed demo flag if not present
+        if (!db.FeatureFlags.Any(f => f.Key == "new-upi-checkout" && f.EnvironmentId == "production"))
+        {
+            var defaultFlag = new BlastRadius.Api.Data.Entities.FeatureFlagEntity
+            {
+                Key = "new-upi-checkout",
+                Name = "1-Click Instant UPI Checkout",
+                Description = "Accelerated payment checkout flow using instant UPI intent",
+                IsEnabled = true,
+                RolloutPercentage = 25,
+                EnvironmentId = "production",
+                Version = 1,
+                BlastRadiusPolicy = new BlastRadius.Api.Data.Entities.BlastRadiusPolicyEntity
+                {
+                    MaxErrorRatePercent = 2.0,
+                    MinRequestsThreshold = 10,
+                    SlidingWindowSeconds = 60,
+                    AutoKillEnabled = true
+                }
+            };
+            db.FeatureFlags.Add(defaultFlag);
+            db.SaveChanges();
+            logger.LogInformation("Seeded demo feature flag 'new-upi-checkout' (Rollout: 25%, Threshold: 2.0%).");
         }
     }
     catch (Exception ex)

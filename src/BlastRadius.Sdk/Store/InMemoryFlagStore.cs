@@ -239,11 +239,12 @@ public sealed class InMemoryFlagStore : IInMemoryFlagStore
 
         try
         {
-            var configurationOptions = ConfigurationOptions.Parse(_options.RedisConnectionString);
-            configurationOptions.Ssl = _options.Ssl;
-            configurationOptions.ConnectTimeout = _options.ConnectTimeoutMs;
-            configurationOptions.AbortOnConnectFail = false; // Never crash host app if Redis is temporarily unreachable
-            configurationOptions.AsyncTimeout = _options.ConnectTimeoutMs;
+            var configurationOptions = RedisConfigurationHelper.Parse(_options.RedisConnectionString, _options.Ssl, _options.ConnectTimeoutMs);
+            if (configurationOptions == null)
+            {
+                _logger.LogWarning("Invalid Redis connection string. Real-time Pub/Sub sync is disabled.");
+                return;
+            }
 
             _redis = await ConnectionMultiplexer.ConnectAsync(configurationOptions);
             _subscriber = _redis.GetSubscriber();

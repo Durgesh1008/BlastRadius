@@ -1,0 +1,6 @@
+@BlastRadius.DemoApp_HostAddress = http://localhost:5288
+
+GET {{BlastRadius.DemoApp_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -20,7 +20,9 @@ Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
 
-#Keys
-
-appsettings.Development.json/
-appsettings.json/
+## Secrets and Local App Configuration (Files, NOT directories)
+appsettings.Development.json
+appsettings.*.local.json
+*.local.json
+*.env
+.env*

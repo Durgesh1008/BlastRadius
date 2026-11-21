@@ -65,7 +65,8 @@ public sealed class RedisPublisher : IRedisPublisher
         }
 
         string? connectionString = _configuration.GetConnectionString("Redis") ?? _configuration["BlastRadius:RedisConnectionString"];
-        if (string.IsNullOrWhiteSpace(connectionString) || connectionString.Contains("YOUR_UPSTASH_REDIS_CONNECTION_STRING"))
+        var options = RedisConnectionHelper.Parse(connectionString);
+        if (options == null)
         {
             return null;
         }
@@ -77,11 +78,6 @@ public sealed class RedisPublisher : IRedisPublisher
             {
                 return _redis;
             }
-
-            var options = ConfigurationOptions.Parse(connectionString);
-            options.Ssl = true; // Upstash requires SSL
-            options.AbortOnConnectFail = false;
-            options.ConnectTimeout = 5000;
 
             _redis = await ConnectionMultiplexer.ConnectAsync(options);
             return _redis;
