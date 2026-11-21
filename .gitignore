@@ -28,3 +28,10 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
+
+## Secrets and Local App Configuration (Files, NOT directories)
+appsettings.Development.json
+appsettings.*.local.json
+*.local.json
+*.env
+.env*

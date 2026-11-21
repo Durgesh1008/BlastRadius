@@ -1,0 +1,1639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BlastRadius — Self-Healing Feature Flag & Blast-Radius Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #080c14;
+      --bg-surface: #0e1524;
+      --bg-card: #131d31;
+      --bg-card-hover: #18253f;
+      --bg-elevated: #1a2844;
+      --border: #1f2c45;
+      --border-accent: #2e4166;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-faint: #64748b;
+      --emerald: #10b981;
+      --emerald-bg: rgba(16, 185, 129, 0.1);
+      --crimson: #ef4444;
+      --crimson-bg: rgba(239, 68, 68, 0.12);
+      --amber: #f59e0b;
+      --amber-bg: rgba(245, 158, 11, 0.1);
+      --indigo: #6366f1;
+      --indigo-bg: rgba(99, 102, 241, 0.12);
+      --cyan: #06b6d4;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Bar */
+    header {
+      background-color: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      background: #1e293b;
+      border: 1px solid var(--border-accent);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .brand-meta h1 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .brand-meta span {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .badge-env {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid var(--border);
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .status-badge.healthy {
+      background: var(--emerald-bg);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .status-badge.tripped {
+      background: var(--crimson-bg);
+      color: var(--crimson);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      animation: alertPulse 1.5s infinite;
+    }
+
+    @keyframes alertPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.02); opacity: 0.85; }
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* Navigation Tabs */
+    .nav-bar {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      gap: 1.5rem;
+    }
+
+    .nav-tab {
+      padding: 0.75rem 0.25rem;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.15s ease;
+    }
+
+    .nav-tab:hover {
+      color: var(--text-main);
+    }
+
+    .nav-tab.active {
+      color: var(--text-main);
+      border-bottom-color: var(--indigo);
+    }
+
+    .nav-tab .tab-badge {
+      background: #1e293b;
+      padding: 0.1rem 0.4rem;
+      border-radius: 10px;
+      font-size: 0.7rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-muted);
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      width: 100%;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Grid Layouts */
+    .grid-2col {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 1024px) {
+      .grid-2col { grid-template-columns: 1fr; }
+    }
+
+    /* Cards */
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-title {
+      font-size: 0.88rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-main);
+      letter-spacing: -0.01em;
+    }
+
+    .panel-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* Form Inputs */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .form-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--text-muted);
+    }
+
+    .form-input, .form-select {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-main);
+      padding: 0.6rem 0.75rem;
+      font-size: 0.85rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    .form-input:focus, .form-select:focus {
+      border-color: var(--indigo);
+    }
+
+    .form-input.mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .input-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 0.6rem 1rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-secondary {
+      background: #1e293b;
+      color: var(--text-main);
+      border-color: var(--border-accent);
+    }
+
+    .btn-secondary:hover {
+      background: #334155;
+    }
+
+    .btn-danger {
+      background: var(--crimson-bg);
+      color: var(--crimson);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.25);
+    }
+
+    .btn-sm {
+      padding: 0.35rem 0.6rem;
+      font-size: 0.74rem;
+    }
+
+    /* Live Storefront Checkout Box */
+    .store-product {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .store-product-info h3 {
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+
+    .store-product-info p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .store-product-price {
+      font-size: 1.2rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--emerald);
+    }
+
+    /* Gateway Experience Container */
+    .gateway-shell {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-card);
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .gateway-shell.upi {
+      border-color: rgba(99, 102, 241, 0.4);
+      background: rgba(99, 102, 241, 0.03);
+    }
+
+    .gateway-shell.legacy {
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.03);
+    }
+
+    .gateway-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .gateway-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.74rem;
+      font-weight: 600;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+    }
+
+    .gateway-badge.upi {
+      background: var(--indigo-bg);
+      color: var(--indigo);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+
+    .gateway-badge.legacy {
+      background: var(--emerald-bg);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    /* Math Breakdown Box */
+    .math-box {
+      background: #060910;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      line-height: 1.5;
+    }
+
+    .math-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.15rem 0;
+    }
+
+    .math-label { color: var(--text-faint); }
+    .math-val { color: var(--cyan); font-weight: 600; }
+
+    /* Rollout Spectrum Bar */
+    .rollout-bar-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      margin-top: 0.5rem;
+    }
+
+    .rollout-bar-track {
+      height: 8px;
+      background: #1e293b;
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .rollout-bar-fill {
+      height: 100%;
+      background: var(--indigo);
+      transition: width 0.3s ease;
+    }
+
+    .rollout-bar-marker {
+      position: absolute;
+      top: -2px;
+      width: 4px;
+      height: 12px;
+      background: #fff;
+      border-radius: 2px;
+      box-shadow: 0 0 4px #000;
+    }
+
+    /* Table Styles */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      text-align: left;
+    }
+
+    .data-table th {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.68rem;
+      letter-spacing: 0.04em;
+    }
+
+    .data-table td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-main);
+    }
+
+    .data-table tr:hover td {
+      background: var(--bg-card-hover);
+    }
+
+    .data-table .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Banner Alerts */
+    .alert-banner {
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    .alert-banner.tripped {
+      background: var(--crimson-bg);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+
+    /* Stats Ribbon */
+    .stats-ribbon {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+    }
+
+    @media (max-width: 860px) {
+      .stats-ribbon { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.85rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+
+    .stat-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-main);
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(2px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-window {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-accent);
+      border-radius: 8px;
+      width: 100%;
+      max-width: 580px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .modal-header h2 {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+
+    /* Waterfall log */
+    .waterfall-box {
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #060910;
+    }
+
+    .waterfall-entry {
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid #141d2e;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .waterfall-entry.fail {
+      background: rgba(239, 68, 68, 0.08);
+      border-left: 3px solid var(--crimson);
+    }
+
+    .waterfall-entry.success {
+      border-left: 3px solid var(--emerald);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">BR</div>
+      <div class="brand-meta">
+        <h1>BlastRadius Control Engine <span class="badge-env">PROD</span></h1>
+        <span>Self-Healing Feature Flags & Canary Blast-Radius Defense</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span class="status-badge healthy" id="systemBreakerBadge">
+        <span class="dot"></span> <span id="systemBreakerText">CIRCUIT: ARMED</span>
+      </span>
+      <button class="btn btn-secondary btn-sm" onclick="refreshAllData()">🔄 Sync</button>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-bar">
+    <button class="nav-tab active" onclick="switchTab('storefront')">
+      🛍️ Customer Experience & Checkout
+    </button>
+    <button class="nav-tab" onclick="switchTab('flags')">
+      🎛️ Control Plane Studio <span class="tab-badge" id="flagsCountBadge">0</span>
+    </button>
+    <button class="nav-tab" onclick="switchTab('chaos')">
+      💥 Chaos & Circuit Breaker Cockpit
+    </button>
+    <button class="nav-tab" onclick="switchTab('audit')">
+      📜 Audit History
+    </button>
+  </nav>
+
+  <!-- Main View -->
+  <main>
+
+    <!-- ========================================== -->
+    <!-- TAB 1: CUSTOMER EXPERIENCE & CHECKOUT      -->
+    <!-- ========================================== -->
+    <div id="tab-storefront" class="tab-content active">
+      <div class="grid-2col">
+
+        <!-- Left: Customer Profile & Order Selection -->
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">🛒 End-User Shopping Checkout</div>
+              <div class="panel-subtitle">Experience how real users interact with the app as flags toggle</div>
+            </div>
+          </div>
+
+          <!-- Product Cart -->
+          <div class="store-product">
+            <div class="store-product-info">
+              <h3 id="productNameDisplay">Dedicated GPU Cloud Instance</h3>
+              <p>1x NVIDIA H100 SXM5 · 80GB VRAM · Hourly Billing</p>
+            </div>
+            <div class="store-product-price" id="productPriceDisplay">$2,499.00</div>
+          </div>
+
+          <!-- Customizable Order Parameters (No Dummy Restrictions) -->
+          <div class="input-row">
+            <div class="form-group">
+              <label class="form-label">Customer User ID</label>
+              <div style="display:flex; gap:0.4rem;">
+                <input type="text" id="custUserId" class="form-input mono" placeholder="e.g. usr_vip_892" value="usr_alice">
+                <button class="btn btn-secondary btn-sm" onclick="generateRandomUser()">🎲 Random</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Customer Tier</label>
+              <select id="custUserTier" class="form-select" onchange="runLiveEvaluation()">
+                <option value="Standard">Standard Tier</option>
+                <option value="VIP">VIP Customer</option>
+                <option value="BetaTester">Beta Tester</option>
+                <option value="Enterprise">Enterprise Tier</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="input-row">
+            <div class="form-group">
+              <label class="form-label">Location / City</label>
+              <input type="text" id="custCity" class="form-input" value="Bangalore" oninput="runLiveEvaluation()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Target Feature Flag</label>
+              <select id="custTargetFlag" class="form-select mono" onchange="runLiveEvaluation()">
+                <option value="new-upi-checkout">new-upi-checkout</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- MurmurHash3 Math Box -->
+          <div class="math-box">
+            <div class="math-row">
+              <span class="math-label">MurmurHash3 Expression:</span>
+              <span class="math-val" id="mathExpression">hash("new-upi-checkout:usr_alice")</span>
+            </div>
+            <div class="math-row">
+              <span class="math-label">Raw 32-bit Hash:</span>
+              <span class="math-val mono" id="mathRawHash">0x00000000</span>
+            </div>
+            <div class="math-row">
+              <span class="math-label">Computed Cohort Bucket:</span>
+              <span class="math-val mono" id="mathBucket">Bucket 0 / 100</span>
+            </div>
+            <div class="math-row">
+              <span class="math-label">Rollout Allocation:</span>
+              <span class="math-val" id="mathRolloutMatch">Checking...</span>
+            </div>
+            <div class="math-row">
+              <span class="math-label">Local Evaluation Latency:</span>
+              <span class="math-val" id="mathLatency">&lt; 0.5 ms (RAM)</span>
+            </div>
+
+            <!-- Spectrum visualization -->
+            <div class="rollout-bar-container">
+              <div class="rollout-bar-track">
+                <div class="rollout-bar-fill" id="spectrumFill" style="width: 25%;"></div>
+                <div class="rollout-bar-marker" id="spectrumMarker" style="left: 7%;"></div>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:0.65rem; color:var(--text-faint); margin-top:0.2rem;">
+                <span>0% (Canary Ingress)</span>
+                <span id="spectrumThresholdText">Active Rollout: 25%</span>
+                <span>100%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Reactive Web App Presentation (What the User Sees) -->
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">⚡ Dynamic Web App Payment View</div>
+              <div class="panel-subtitle">This form automatically adapts depending on feature flag evaluation</div>
+            </div>
+            <span class="status-badge" id="evalOutcomeBadge">EVALUATING...</span>
+          </div>
+
+          <!-- Breaker Trip Notice (Shown if auto-killed) -->
+          <div id="circuitBreakerNotice" class="alert-banner tripped" style="display:none;">
+            <div>
+              <strong>🚨 Circuit Breaker Auto-Killed This Feature:</strong>
+              <div id="circuitBreakerNoticeText" style="margin-top:0.2rem; font-size:0.75rem;"></div>
+              <div style="margin-top:0.35rem; color:#fecaca;">App seamlessly fell back to Legacy Card Gateway with 0% downtime.</div>
+            </div>
+          </div>
+
+          <!-- Dynamic Presentation Container -->
+          <div id="dynamicExperienceContainer">
+            <!-- Will be dynamically injected by JS: Modern UPI Flow vs Legacy Card Flow -->
+          </div>
+
+          <!-- Action Button -->
+          <button class="btn btn-primary" id="placeOrderBtn" onclick="submitRealCheckout()" style="padding:0.85rem; font-size:0.9rem;">
+            💳 Confirm & Process Payment ($2,499.00)
+          </button>
+
+          <!-- Transaction Result Receipt Box -->
+          <div id="orderReceiptBox" style="display:none; border:1px solid var(--border); background:#060910; border-radius:6px; padding:0.85rem; font-family:'JetBrains Mono',monospace; font-size:0.75rem;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+              <span style="color:var(--text-faint)">Order ID:</span>
+              <span id="receiptOrderId" style="color:var(--text-main); font-weight:600;">--</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+              <span style="color:var(--text-faint)">Gateway Selected:</span>
+              <span id="receiptGateway" style="font-weight:600;">--</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+              <span style="color:var(--text-faint)">Execution Latency:</span>
+              <span id="receiptLatency">-- ms</span>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+              <span style="color:var(--text-faint)">Status:</span>
+              <span id="receiptStatus" style="font-weight:600;">--</span>
+            </div>
+            <div id="receiptMessage" style="margin-top:0.4rem; padding-top:0.4rem; border-top:1px solid var(--border); color:var(--text-muted);"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TAB 2: CONTROL PLANE & FLAG STUDIO         -->
+    <!-- ========================================== -->
+    <div id="tab-flags" class="tab-content">
+      <div class="panel" style="margin-bottom:1.5rem;">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">🎛️ Feature Flags Management Studio</div>
+            <div class="panel-subtitle">Create, configure, roll out, and govern feature flags backed by Neon PostgreSQL & Redis</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openCreateFlagModal()">＋ Create Feature Flag</button>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Flag Key</th>
+              <th>Display Name</th>
+              <th>State</th>
+              <th>Rollout %</th>
+              <th>Blast Radius Policy</th>
+              <th>Version</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="flagsTableBody">
+            <tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:2rem;">Loading registered flags from Neon DB...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TAB 3: CHAOS & CIRCUIT BREAKER COCKPIT     -->
+    <!-- ========================================== -->
+    <div id="tab-chaos" class="tab-content">
+      <!-- Stats Ribbon -->
+      <div class="stats-ribbon" style="margin-bottom:1.5rem;">
+        <div class="stat-card">
+          <span class="stat-label">Total Checkouts</span>
+          <span class="stat-value" id="statTotal">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">New Feature Checkouts</span>
+          <span class="stat-value" id="statNewUpi" style="color:var(--indigo);">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Legacy Fallback Orders</span>
+          <span class="stat-value" id="statLegacy" style="color:var(--emerald);">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">60s Sliding Error Rate</span>
+          <span class="stat-value" id="statErrorRate">0.0%</span>
+        </div>
+      </div>
+
+      <div class="grid-2col">
+        <!-- Chaos Controls -->
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">⚡ Chaos Failure Injector</div>
+              <div class="panel-subtitle">Inject upstream partner faults to stress-test the 50ms circuit breaker</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="resetTelemetryBaseline()">🔄 Reset Baseline</button>
+          </div>
+
+          <div class="form-group">
+            <div style="display:flex; justify-content:space-between;">
+              <label class="form-label">Upstream Failure Rate (%)</label>
+              <span id="chaosRateDisplay" class="mono" style="font-size:0.8rem; font-weight:600; color:var(--crimson);">15%</span>
+            </div>
+            <input type="range" id="chaosFailureSlider" min="0" max="100" value="15" style="width:100%;" oninput="updateChaosSettings()">
+            <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:var(--text-faint);">
+              <span>0% (Reliable)</span>
+              <span>Threshold: 2.0%</span>
+              <span>100% (Outage)</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div style="display:flex; justify-content:space-between;">
+              <label class="form-label">Artificial Partner Latency</label>
+              <span id="chaosLatencyDisplay" class="mono" style="font-size:0.8rem; font-weight:600;">30 ms</span>
+            </div>
+            <input type="range" id="chaosLatencySlider" min="0" max="500" step="10" value="30" style="width:100%;" oninput="updateChaosSettings()">
+          </div>
+
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+            <button class="btn btn-primary" onclick="fireSingleTestOrder()">▶ Fire 1 Order</button>
+            <button class="btn btn-danger" onclick="fireBatchStressTest(50)">🔥 Fire 50 Orders (Trigger Kill Switch)</button>
+            <button class="btn btn-secondary" onclick="fireBatchStressTest(10)">Fire 10 Orders</button>
+          </div>
+        </div>
+
+        <!-- Real-Time Transaction Waterfall -->
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">🌊 Live Transaction Waterfall</div>
+              <div class="panel-subtitle">Real-time inspection of incoming checkouts and fallback failover</div>
+            </div>
+            <span class="mono" style="font-size:0.75rem; color:var(--text-muted);" id="waterfallCount">0 events</span>
+          </div>
+
+          <div class="waterfall-box" id="waterfallList">
+            <div style="padding:1.5rem; text-align:center; color:var(--text-muted); font-size:0.75rem;">
+              No transactions recorded yet. Fire orders to observe real-time routing.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TAB 4: AUDIT HISTORY                      -->
+    <!-- ========================================== -->
+    <div id="tab-audit" class="tab-content">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">📜 Immutable Audit Log</div>
+            <div class="panel-subtitle">Every mutation, rollout change, and circuit breaker trip recorded in PostgreSQL</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="loadAuditLogs()">🔄 Refresh Audit Trail</button>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Timestamp (UTC)</th>
+              <th>Flag Key</th>
+              <th>Action</th>
+              <th>Triggered By</th>
+              <th>Version</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="auditTableBody">
+            <tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">Loading audit logs...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- MODAL: CREATE FEATURE FLAG                 -->
+  <!-- ========================================== -->
+  <div id="createFlagModal" class="modal-backdrop">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h2>Create Feature Flag</h2>
+        <button class="close-btn" onclick="closeCreateFlagModal()">✕</button>
+      </div>
+
+      <div class="input-row">
+        <div class="form-group">
+          <label class="form-label">Flag Key (Unique ID)</label>
+          <input type="text" id="newFlagKey" class="form-input mono" placeholder="e.g. crypto-settlement">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Display Name</label>
+          <input type="text" id="newFlagName" class="form-input" placeholder="e.g. 1-Click Crypto Settlement">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <input type="text" id="newFlagDesc" class="form-input" placeholder="Describe the purpose of this feature rollout...">
+      </div>
+
+      <div class="input-row">
+        <div class="form-group">
+          <label class="form-label">Environment</label>
+          <select id="newFlagEnv" class="form-select">
+            <option value="production">production</option>
+            <option value="staging">staging</option>
+            <option value="development">development</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Canary Rollout (%)</label>
+          <input type="number" id="newFlagRollout" class="form-input mono" min="0" max="100" value="25">
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border); padding-top:0.75rem;">
+        <span class="form-label" style="display:block; margin-bottom:0.5rem; color:var(--cyan);">🛡️ Blast-Radius Auto-Kill Safety Policy</span>
+        <div class="input-row">
+          <div class="form-group">
+            <label class="form-label">Max Error Rate (%)</label>
+            <input type="number" step="0.1" id="newPolicyMaxError" class="form-input mono" value="2.0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Min Requests Threshold</label>
+            <input type="number" id="newPolicyMinReq" class="form-input mono" value="20">
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:0.5rem;">
+        <button class="btn btn-secondary" onclick="closeCreateFlagModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitCreateFlag()">Deploy Feature Flag</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // System Endpoints
+    const API_BASE = "http://localhost:5188";   // BlastRadius.Api (Control Plane)
+    const DEMO_BASE = "http://localhost:5288";  // BlastRadius.DemoApp (SDK Host)
+
+    let currentFlags = [];
+    let currentLiveStats = null;
+    let evalDebounceTimer = null;
+
+    // Navigation Tab Switching
+    function switchTab(tabId) {
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      const btn = event.currentTarget || document.querySelector(`[onclick="switchTab('${tabId}')"]`);
+      if (btn) btn.classList.add('active');
+
+      const panel = document.getElementById(`tab-${tabId}`);
+      if (panel) panel.classList.add('active');
+
+      if (tabId === 'flags') loadFlagsList();
+      if (tabId === 'audit') loadAuditLogs();
+      if (tabId === 'chaos') syncStats();
+      if (tabId === 'storefront') runLiveEvaluation();
+    }
+
+    // Generate Random User
+    function generateRandomUser() {
+      const randNum = Math.floor(1000 + Math.random() * 9000);
+      document.getElementById('custUserId').value = `usr_customer_${randNum}`;
+      runLiveEvaluation();
+    }
+
+    // Modal Controls
+    function openCreateFlagModal() {
+      document.getElementById('createFlagModal').classList.add('open');
+    }
+    function closeCreateFlagModal() {
+      document.getElementById('createFlagModal').classList.remove('open');
+    }
+
+    // ==========================================
+    // Real-Time Evaluation Engine
+    // ==========================================
+    async function runLiveEvaluation() {
+      clearTimeout(evalDebounceTimer);
+      evalDebounceTimer = setTimeout(async () => {
+        const flagKey = document.getElementById('custTargetFlag').value || 'new-upi-checkout';
+        const userId = document.getElementById('custUserId').value || 'usr_alice';
+        const userTier = document.getElementById('custUserTier').value || 'Standard';
+        const city = document.getElementById('custCity').value || 'Bangalore';
+
+        try {
+          const res = await fetch(`${DEMO_BASE}/api/simulation/evaluate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ flagKey, userId, userTier, city })
+          });
+
+          if (!res.ok) return;
+          const data = await res.json();
+          renderEvaluationResult(data);
+        } catch (err) {
+          console.error("Evaluation error:", err);
+        }
+      }, 100);
+    }
+
+    function renderEvaluationResult(evalData) {
+      // 1. Math Display
+      document.getElementById('mathExpression').innerText = `MurmurHash3("${evalData.compositeKey}")`;
+      document.getElementById('mathRawHash').innerText = `0x${(evalData.rawHash >>> 0).toString(16).toUpperCase().padStart(8, '0')}`;
+      document.getElementById('mathBucket').innerText = `Bucket ${evalData.bucket !== null ? evalData.bucket : '--'} / 100`;
+
+      const spectrumFill = document.getElementById('spectrumFill');
+      const spectrumMarker = document.getElementById('spectrumMarker');
+      const spectrumText = document.getElementById('spectrumThresholdText');
+
+      spectrumFill.style.width = `${evalData.rolloutPercentage}%`;
+      spectrumMarker.style.left = `${evalData.bucket !== null ? evalData.bucket : 0}%`;
+      spectrumText.innerText = `Active Rollout: ${evalData.rolloutPercentage}%`;
+
+      const mathMatch = document.getElementById('mathRolloutMatch');
+      const outcomeBadge = document.getElementById('evalOutcomeBadge');
+      const breakerNotice = document.getElementById('circuitBreakerNotice');
+      const breakerNoticeText = document.getElementById('circuitBreakerNoticeText');
+
+      if (!evalData.isEnabled && evalData.killReason) {
+        mathMatch.innerHTML = `<span style="color:var(--crimson);">AUTO-KILLED BY CIRCUIT BREAKER</span>`;
+        outcomeBadge.className = 'status-badge tripped';
+        outcomeBadge.innerText = 'CIRCUIT BREAKER: TRIPPED';
+        breakerNotice.style.display = 'flex';
+        breakerNoticeText.innerText = evalData.killReason;
+      } else if (!evalData.isEnabled) {
+        mathMatch.innerHTML = `<span style="color:var(--text-faint);">FLAG DISABLED</span>`;
+        outcomeBadge.className = 'status-badge';
+        outcomeBadge.style.background = '#1e293b';
+        outcomeBadge.style.color = '#94a3b8';
+        outcomeBadge.innerText = 'FLAG INACTIVE';
+        breakerNotice.style.display = 'none';
+      } else if (evalData.value) {
+        mathMatch.innerHTML = `<span style="color:var(--emerald);">QUALIFIES (${evalData.bucket} &lt; ${evalData.rolloutPercentage})</span>`;
+        outcomeBadge.className = 'status-badge healthy';
+        outcomeBadge.innerText = 'ROUTE: FAST-TRACK UPI';
+        breakerNotice.style.display = 'none';
+      } else {
+        mathMatch.innerHTML = `<span style="color:var(--text-muted);">OUTSIDE CANARY (${evalData.bucket} &ge; ${evalData.rolloutPercentage})</span>`;
+        outcomeBadge.className = 'status-badge';
+        outcomeBadge.style.background = '#1e293b';
+        outcomeBadge.style.color = '#94a3b8';
+        outcomeBadge.innerText = 'ROUTE: STABLE CARD';
+        breakerNotice.style.display = 'none';
+      }
+
+      // Latency display
+      document.getElementById('mathLatency').innerText = `${evalData.executionTimeMicroseconds} µs (< 0.5 ms)`;
+
+      // 2. Dynamic View Rendering (How the App Reacts to the End-User!)
+      const container = document.getElementById('dynamicExperienceContainer');
+      const orderBtn = document.getElementById('placeOrderBtn');
+
+      if (evalData.value) {
+        // Render ⚡ Modern Fast-Track UPI View
+        container.innerHTML = `
+          <div class="gateway-shell upi">
+            <div class="gateway-header">
+              <span class="gateway-badge upi">⚡ Next-Gen Instant UPI Intent</span>
+              <span style="font-size:0.75rem; color:var(--text-muted); font-family:'JetBrains Mono';">Sub-Second Settlement</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Virtual Payment Address (VPA)</label>
+              <input type="text" class="form-input mono" id="custUpiVpa" value="${evalData.userId}@okhdfcbank" placeholder="name@bank">
+            </div>
+            <div style="display:flex; gap:0.5rem; margin-top:0.25rem;">
+              <span style="background:#1e293b; padding:0.25rem 0.6rem; border-radius:4px; font-size:0.72rem; color:var(--cyan); border:1px solid var(--border);">Google Pay</span>
+              <span style="background:#1e293b; padding:0.25rem 0.6rem; border-radius:4px; font-size:0.72rem; color:var(--indigo); border:1px solid var(--border);">PhonePe</span>
+              <span style="background:#1e293b; padding:0.25rem 0.6rem; border-radius:4px; font-size:0.72rem; color:#f59e0b; border:1px solid var(--border);">Paytm</span>
+            </div>
+          </div>
+        `;
+        orderBtn.innerHTML = `⚡ 1-Click Pay with Instant UPI ($2,499.00)`;
+        orderBtn.style.background = '#4f46e5';
+      } else {
+        // Render 💳 Standard Legacy Card & Banking View
+        container.innerHTML = `
+          <div class="gateway-shell legacy">
+            <div class="gateway-header">
+              <span class="gateway-badge legacy">💳 Standard Card Gateway (Safe Stable Fallback)</span>
+              <span style="font-size:0.75rem; color:var(--text-muted); font-family:'JetBrains Mono';">3-D Secure 2.0</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Card Number</label>
+              <input type="text" class="form-input mono" value="4111 •••• •••• 9842" disabled style="opacity:0.8;">
+            </div>
+            <div class="input-row">
+              <div class="form-group">
+                <label class="form-label">Expires</label>
+                <input type="text" class="form-input mono" value="08/29" disabled style="opacity:0.8;">
+              </div>
+              <div class="form-group">
+                <label class="form-label">CVV</label>
+                <input type="password" class="form-input mono" value="888" disabled style="opacity:0.8;">
+              </div>
+            </div>
+          </div>
+        `;
+        orderBtn.innerHTML = `💳 Pay with Standard Card ($2,499.00)`;
+        orderBtn.style.background = '#2563eb';
+      }
+    }
+
+    // ==========================================
+    // Real Checkout Submission
+    // ==========================================
+    async function submitRealCheckout() {
+      const flagKey = document.getElementById('custTargetFlag').value || 'new-upi-checkout';
+      const userId = document.getElementById('custUserId').value || 'usr_alice';
+      const userTier = document.getElementById('custUserTier').value || 'Standard';
+      const city = document.getElementById('custCity').value || 'Bangalore';
+      const orderBtn = document.getElementById('placeOrderBtn');
+
+      orderBtn.disabled = true;
+      orderBtn.innerText = 'Processing Order...';
+
+      try {
+        const res = await fetch(`${DEMO_BASE}/api/checkout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            orderId: `ORD-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
+            amount: 2499.00,
+            itemName: "Dedicated GPU Cloud Instance",
+            userTier,
+            city,
+            flagKey
+          })
+        });
+
+        const data = await res.json();
+        renderOrderReceipt(data);
+        syncStats();
+        runLiveEvaluation();
+      } catch (err) {
+        console.error("Checkout failed:", err);
+      } finally {
+        orderBtn.disabled = false;
+      }
+    }
+
+    function renderOrderReceipt(receipt) {
+      const box = document.getElementById('orderReceiptBox');
+      box.style.display = 'block';
+
+      document.getElementById('receiptOrderId').innerText = receipt.orderId;
+      document.getElementById('receiptLatency').innerText = `${receipt.latencyMs} ms`;
+
+      const gatewaySpan = document.getElementById('receiptGateway');
+      if (receipt.gatewayUsed === 'NewInstantUPI') {
+        gatewaySpan.innerHTML = `<span style="color:var(--indigo);">⚡ NewInstantUPI</span> (Bucket ${receipt.murmurHashBucket})`;
+      } else {
+        gatewaySpan.innerHTML = `<span style="color:var(--emerald);">💳 LegacyCard</span> (${receipt.evaluationReason})`;
+      }
+
+      const statusSpan = document.getElementById('receiptStatus');
+      const msgDiv = document.getElementById('receiptMessage');
+
+      if (receipt.success) {
+        statusSpan.innerHTML = `<span style="color:var(--emerald);">SUCCESS (200 OK)</span>`;
+        msgDiv.innerText = receipt.message;
+        msgDiv.style.color = 'var(--text-muted)';
+      } else {
+        statusSpan.innerHTML = `<span style="color:var(--crimson);">FAILED (504 TIMEOUT)</span>`;
+        msgDiv.innerHTML = `<strong style="color:var(--crimson);">${receipt.message}</strong><br><span style="font-size:0.7rem; color:#fca5a5;">${receipt.errorDetails || ''}</span>`;
+      }
+    }
+
+    // ==========================================
+    // Flags Management (Control Plane)
+    // ==========================================
+    async function loadFlagsList() {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/flags?environment=production`);
+        if (!res.ok) return;
+        currentFlags = await res.json();
+
+        // Update target flag dropdown in storefront
+        const flagSelect = document.getElementById('custTargetFlag');
+        const selectedVal = flagSelect.value;
+        flagSelect.innerHTML = '';
+        currentFlags.forEach(f => {
+          const opt = document.createElement('option');
+          opt.value = f.key;
+          opt.text = `${f.key} (${f.rolloutPercentage}%)`;
+          flagSelect.appendChild(opt);
+        });
+        if (selectedVal && currentFlags.some(f => f.key === selectedVal)) {
+          flagSelect.value = selectedVal;
+        }
+
+        document.getElementById('flagsCountBadge').innerText = currentFlags.length;
+
+        const tbody = document.getElementById('flagsTableBody');
+        if (currentFlags.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">No flags created yet.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = currentFlags.map(f => {
+          const isKilled = !f.isEnabled && f.killReason;
+          const statusBadge = isKilled
+            ? `<span class="status-badge tripped" title="${f.killReason}">AUTO-KILLED</span>`
+            : (f.isEnabled 
+                ? `<span class="status-badge healthy">ACTIVE</span>`
+                : `<span class="status-badge" style="background:#1e293b; color:#94a3b8;">DISABLED</span>`);
+
+          return `
+            <tr>
+              <td class="mono" style="font-weight:600; color:var(--cyan);">${f.key}</td>
+              <td>
+                <div style="font-weight:600;">${f.name}</div>
+                <div style="font-size:0.7rem; color:var(--text-muted);">${f.description || ''}</div>
+              </td>
+              <td>${statusBadge}</td>
+              <td style="min-width:140px;">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <input type="range" min="0" max="100" value="${f.rolloutPercentage}" 
+                    style="width:90px;" 
+                    onchange="updateRollout('${f.key}', this.value)">
+                  <span class="mono" style="font-size:0.75rem; font-weight:600;">${f.rolloutPercentage}%</span>
+                </div>
+              </td>
+              <td class="mono" style="font-size:0.72rem; color:var(--text-muted);">
+                Max Err: ${f.blastRadiusPolicy?.maxErrorRatePercent || 2.0}% · Min: ${f.blastRadiusPolicy?.minRequestsThreshold || 50}
+              </td>
+              <td class="mono">v${f.version}</td>
+              <td>
+                <div style="display:flex; gap:0.4rem;">
+                  <button class="btn btn-secondary btn-sm" onclick="toggleFlagState('${f.key}', ${!f.isEnabled})">
+                    ${f.isEnabled ? 'Disable' : 'Enable'}
+                  </button>
+                  <button class="btn btn-danger btn-sm" onclick="tripEmergencyKill('${f.key}')" ${!f.isEnabled ? 'disabled' : ''}>
+                    Kill
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error("Failed to load flags:", err);
+      }
+    }
+
+    async function updateRollout(flagKey, percentage) {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/flags/${flagKey}/rollout`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rolloutPercentage: parseInt(percentage) })
+        });
+        if (res.ok) {
+          loadFlagsList();
+          runLiveEvaluation();
+        }
+      } catch (err) {
+        console.error("Rollout update failed:", err);
+      }
+    }
+
+    async function toggleFlagState(flagKey, shouldEnable) {
+      const flag = currentFlags.find(f => f.key === flagKey);
+      if (!flag) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/flags/${flagKey}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: flag.name,
+            description: flag.description,
+            isEnabled: shouldEnable,
+            rolloutPercentage: flag.rolloutPercentage,
+            fallbackValue: false,
+            expectedVersion: flag.version,
+            blastRadiusPolicy: flag.blastRadiusPolicy,
+            targetingRules: flag.targetingRules || []
+          })
+        });
+        if (res.ok) {
+          loadFlagsList();
+          runLiveEvaluation();
+        }
+      } catch (err) {
+        console.error("Toggle flag failed:", err);
+      }
+    }
+
+    async function tripEmergencyKill(flagKey) {
+      const reason = prompt("Enter emergency kill-switch justification:", "Manual incident mitigation by engineer");
+      if (!reason) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/flags/${flagKey}/kill`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason })
+        });
+        if (res.ok) {
+          loadFlagsList();
+          runLiveEvaluation();
+        }
+      } catch (err) {
+        console.error("Emergency kill failed:", err);
+      }
+    }
+
+    async function submitCreateFlag() {
+      const key = document.getElementById('newFlagKey').value.trim();
+      const name = document.getElementById('newFlagName').value.trim();
+      const description = document.getElementById('newFlagDesc').value.trim();
+      const environment = document.getElementById('newFlagEnv').value;
+      const rolloutPercentage = parseInt(document.getElementById('newFlagRollout').value) || 0;
+      const maxErrorRatePercent = parseFloat(document.getElementById('newPolicyMaxError').value) || 2.0;
+      const minRequestsThreshold = parseInt(document.getElementById('newPolicyMinReq').value) || 20;
+
+      if (!key || !name) {
+        alert("Please enter a Flag Key and Display Name.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/flags`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key,
+            name,
+            description,
+            environment,
+            isEnabled: true,
+            rolloutPercentage,
+            fallbackValue: false,
+            blastRadiusPolicy: {
+              maxErrorRatePercent,
+              minRequestsThreshold,
+              slidingWindowSeconds: 60,
+              autoKillEnabled: true,
+              cooldownSeconds: 300
+            },
+            targetingRules: []
+          })
+        });
+
+        if (res.ok) {
+          closeCreateFlagModal();
+          loadFlagsList();
+          runLiveEvaluation();
+        } else {
+          const errData = await res.json();
+          alert(`Error creating flag: ${errData.error || 'Failed'}`);
+        }
+      } catch (err) {
+        console.error("Create flag failed:", err);
+      }
+    }
+
+    // ==========================================
+    // Chaos & Circuit Breaker Cockpit
+    // ==========================================
+    async function syncStats() {
+      try {
+        const flagKey = document.getElementById('custTargetFlag')?.value || 'new-upi-checkout';
+        const res = await fetch(`${DEMO_BASE}/api/simulation/stats?flagKey=${flagKey}`);
+        if (!res.ok) return;
+        currentLiveStats = await res.json();
+
+        document.getElementById('statTotal').innerText = currentLiveStats.totalTransactions.toLocaleString();
+        document.getElementById('statNewUpi').innerText = currentLiveStats.newUpiCount.toLocaleString();
+        document.getElementById('statLegacy').innerText = currentLiveStats.legacyCardCount.toLocaleString();
+
+        const errorRateEl = document.getElementById('statErrorRate');
+        errorRateEl.innerText = `${currentLiveStats.errorRatePercent.toFixed(1)}%`;
+        if (currentLiveStats.errorRatePercent > 2.0) {
+          errorRateEl.style.color = 'var(--crimson)';
+        } else {
+          errorRateEl.style.color = 'var(--emerald)';
+        }
+
+        // Global Circuit Breaker Badge in Top Bar
+        const sysBadge = document.getElementById('systemBreakerBadge');
+        const sysText = document.getElementById('systemBreakerText');
+        if (!currentLiveStats.isNewUpiFlagEnabled && currentLiveStats.killReason) {
+          sysBadge.className = 'status-badge tripped';
+          sysText.innerText = 'CIRCUIT BREAKER: TRIPPED';
+        } else {
+          sysBadge.className = 'status-badge healthy';
+          sysText.innerText = 'CIRCUIT: ARMED';
+        }
+
+        // Waterfall
+        renderWaterfall(currentLiveStats.recentTransactions || []);
+      } catch (err) {
+        console.error("Stats sync failed:", err);
+      }
+    }
+
+    function renderWaterfall(transactions) {
+      const list = document.getElementById('waterfallList');
+      document.getElementById('waterfallCount').innerText = `${transactions.length} recent`;
+
+      if (transactions.length === 0) {
+        list.innerHTML = `<div style="padding:1.5rem; text-align:center; color:var(--text-muted); font-size:0.75rem;">No transactions recorded yet. Fire orders to observe real-time routing.</div>`;
+        return;
+      }
+
+      list.innerHTML = transactions.map(t => {
+        const isUPI = t.gatewayUsed === 'NewInstantUPI';
+        const isSuccess = t.success;
+        return `
+          <div class="waterfall-entry ${isSuccess ? 'success' : 'fail'}">
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              <span style="font-weight:600; color:${isSuccess ? 'var(--emerald)' : 'var(--crimson)'};">
+                ${isSuccess ? '✓ 200' : '✕ 504'}
+              </span>
+              <span style="color:var(--text-main); font-weight:600;">${t.orderId}</span>
+              <span style="color:var(--text-muted);">(${t.userId})</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:0.75rem;">
+              <span style="color:${isUPI ? 'var(--indigo)' : 'var(--emerald)'};">
+                ${isUPI ? '⚡ UPI' : '💳 Card'} ${t.murmurHashBucket !== null ? `[b:${t.murmurHashBucket}]` : ''}
+              </span>
+              <span style="color:var(--text-faint);">${t.latencyMs}ms</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function updateChaosSettings() {
+      const failureRate = parseFloat(document.getElementById('chaosFailureSlider').value);
+      const latency = parseInt(document.getElementById('chaosLatencySlider').value);
+
+      document.getElementById('chaosRateDisplay').innerText = `${failureRate}%`;
+      document.getElementById('chaosLatencyDisplay').innerText = `${latency} ms`;
+
+      try {
+        await fetch(`${DEMO_BASE}/api/simulation/chaos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            failureRatePercent: failureRate,
+            simulateLatencyMs: latency,
+            isFaultInjectionActive: true
+          })
+        });
+      } catch (err) {
+        console.error("Chaos update failed:", err);
+      }
+    }
+
+    async function fireSingleTestOrder() {
+      await submitRealCheckout();
+    }
+
+    async function fireBatchStressTest(count) {
+      const flagKey = document.getElementById('custTargetFlag').value || 'new-upi-checkout';
+      const failureRate = parseFloat(document.getElementById('chaosFailureSlider').value);
+
+      try {
+        const res = await fetch(`${DEMO_BASE}/api/simulation/batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            totalOrders: count,
+            overrideFailureRate: failureRate,
+            concurrency: 10,
+            flagKey
+          })
+        });
+        const data = await res.json();
+        syncStats();
+        loadFlagsList();
+        runLiveEvaluation();
+      } catch (err) {
+        console.error("Batch stress test failed:", err);
+      }
+    }
+
+    async function resetTelemetryBaseline() {
+      try {
+        await fetch(`${DEMO_BASE}/api/simulation/reset`, { method: 'POST' });
+        syncStats();
+        runLiveEvaluation();
+      } catch (err) {
+        console.error("Reset failed:", err);
+      }
+    }
+
+    // ==========================================
+    // Audit History
+    // ==========================================
+    async function loadAuditLogs() {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/audit-logs?environment=production&limit=50`);
+        if (!res.ok) return;
+        const logs = await res.json();
+
+        const tbody = document.getElementById('auditTableBody');
+        if (logs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-muted);">No audit logs found.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = logs.map(l => {
+          const isBreaker = l.action.includes('CircuitBreaker');
+          return `
+            <tr>
+              <td class="mono" style="font-size:0.75rem; color:var(--text-muted);">${new Date(l.timestampUtc).toLocaleTimeString()}</td>
+              <td class="mono" style="font-weight:600; color:var(--cyan);">${l.flagKey}</td>
+              <td>
+                <span class="status-badge ${isBreaker ? 'tripped' : ''}" style="${!isBreaker ? 'background:#1e293b; color:#94a3b8;' : ''}">
+                  ${l.action}
+                </span>
+              </td>
+              <td class="mono" style="font-size:0.75rem;">${l.triggeredBy}</td>
+              <td class="mono">v${l.version}</td>
+              <td style="font-size:0.75rem; color:var(--text-muted); max-width:350px;">${l.details || ''}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error("Failed to load audit logs:", err);
+      }
+    }
+
+    // Master Refresh
+    function refreshAllData() {
+      loadFlagsList();
+      syncStats();
+      runLiveEvaluation();
+    }
+
+    // Initial Load & Heartbeat
+    window.addEventListener('DOMContentLoaded', () => {
+      refreshAllData();
+      setInterval(syncStats, 3000); // Polling every 3s to reflect circuit-breaker status in real time
+    });
+  </script>
+</body>
+</html>
