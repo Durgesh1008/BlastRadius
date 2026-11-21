@@ -222,10 +222,11 @@ public sealed class RedisTelemetryReporter : ITelemetryReporter
 
         try
         {
-            var config = ConfigurationOptions.Parse(_options.RedisConnectionString);
-            config.Ssl = _options.Ssl;
-            config.ConnectTimeout = _options.ConnectTimeoutMs;
-            config.AbortOnConnectFail = false;
+            var config = RedisConfigurationHelper.Parse(_options.RedisConnectionString, _options.Ssl, _options.ConnectTimeoutMs);
+            if (config == null)
+            {
+                return;
+            }
 
             _redis = await ConnectionMultiplexer.ConnectAsync(config);
         }
