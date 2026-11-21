@@ -31,7 +31,7 @@ BlastRadius decouples deployment from release, then adds an autonomous kill swit
 ```
 MIT License
 
-Copyright (c) 2026 Durgesh Chaudhary (Durgeshchaudhary001)
+Copyright (c) 2026 Durgesh Chaudhary
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
